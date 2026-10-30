@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Statistiques — Crée ton CV</title>
+  <style>
+    :root{color-scheme:light;--bg:#f5f6fa;--surface:#fff;--ink:#1b2033;--muted:#5b6278;--line:#d9dce8;--accent:#2b3a67;--danger:#b3261e;--focus:#e9a23b}
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+    main{width:min(100% - 32px,760px);margin:48px auto}
+    h1{font-size:clamp(28px,6vw,38px);line-height:1.1;margin:0 0 8px}
+    p{color:var(--muted)}
+    .panel,.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:22px}
+    .panel{max-width:440px;margin:32px auto}
+    label{display:block;font-weight:600;margin:14px 0 5px}
+    input{width:100%;min-height:46px;border:1px solid var(--line);border-radius:8px;padding:10px;font:inherit;color:var(--ink);background:var(--bg)}
+    button{min-height:46px;border:0;border-radius:9px;padding:10px 16px;background:var(--accent);color:#fff;font:inherit;font-weight:700;cursor:pointer}
+    input:focus-visible,button:focus-visible{outline:3px solid var(--focus);outline-offset:2px}
+    .primary{width:100%;margin-top:20px}
+    .error{color:var(--danger);min-height:24px}
+    .top{display:flex;align-items:center;justify-content:space-between;gap:16px}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px;margin-top:24px}
+    .card h2{font-size:15px;margin:0;color:var(--muted);font-weight:600}
+    .value{font-size:38px;font-weight:800;line-height:1.2;margin-top:10px}
+    .note{font-size:13px;margin-top:20px}
+    [hidden]{display:none!important}
+    @media(max-width:520px){main{margin:28px auto}.top{align-items:flex-start;flex-direction:column}.panel,.card{padding:18px}}
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Statistiques du site</h1>
+    <p>Accès réservé à l’administrateur.</p>
+
+    <form class="panel" id="loginForm">
+      <h2>Connexion</h2>
+      <label for="username">Identifiant</label>
+      <input id="username" name="username" autocomplete="username" required maxlength="128">
+      <label for="password">Mot de passe</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" required maxlength="256">
+      <button class="primary" id="loginButton" type="submit">Se connecter</button>
+      <p class="error" id="loginMessage" role="status" aria-live="polite"></p>
+    </form>
+
+    <section id="dashboard" hidden>
+      <div class="top">
+        <div>
+          <h2>Vue d’ensemble</h2>
+          <p>Compteurs enregistrés depuis le déploiement des statistiques.</p>
+        </div>
+        <button id="logoutButton" type="button">Se déconnecter</button>
+      </div>
+      <div class="grid" aria-live="polite">
+        <article class="card"><h2>Visites (sessions)</h2><div class="value" id="visits">—</div></article>
+        <article class="card"><h2>Sessions ayant cliqué sur un lien</h2><div class="value" id="linkClicks">—</div></article>
+        <article class="card"><h2>Sessions avec modification d’un CV</h2><div class="value" id="modifiedSessions">—</div></article>
+        <article class="card"><h2>Demandes de téléchargement</h2><div class="value" id="downloads">—</div></article>
+      </div>
+      <p class="note">Les chiffres comptent des sessions de navigateur, pas des personnes distinctes garanties. Les visites, clics sur un lien, modifications et demandes de téléchargement sont dédupliqués par session et par jour. Une demande de téléchargement ne confirme pas que le fichier a été enregistré sur l’appareil.</p>
+      <p class="error" id="dashboardMessage" role="status" aria-live="polite"></p>
+    </section>
+  </main>
+  <script>
+    (function(){
+      var endpoint='/.netlify/functions/stats';
+      var loginForm=document.getElementById('loginForm');
+      var dashboard=document.getElementById('dashboard');
+      var loginMessage=document.getElementById('loginMessage');
+      var dashboardMessage=document.getElementById('dashboardMessage');
+
+      async function request(action,options){
+        var response=await fetch(endpoint+'?action='+encodeURIComponent(action),Object.assign({
+          credentials:'same-origin',
+          headers:{'Content-Type':'application/json'}
+        },options||{}));
+        var data=await response.json();
+        return {response:response,data:data};
+      }
+      function showDashboard(stats){
+        document.getElementById('visits').textContent=stats.visits.toLocaleString('fr-FR');
+        document.getElementById('linkClicks').textContent=stats.linkClicks.toLocaleString('fr-FR');
+        document.getElementById('modifiedSessions').textContent=stats.modifiedSessions.toLocaleString('fr-FR');
+        document.getElementById('downloads').textContent=stats.downloads.toLocaleString('fr-FR');
+        loginForm.hidden=true;
+        dashboard.hidden=false;
+      }
+      async function loadStats(){
+        try{
+          var result=await request('stats',{method:'GET',headers:{}});
+          if(result.response.ok){showDashboard(result.data);return}
+          if(result.response.status!==401) loginMessage.textContent=result.data.error||'Impossible de charger les statistiques.';
+        }catch(error){
+          loginMessage.textContent='Impossible de joindre le serveur. Vérifie ta connexion et réessaie.';
+        }
+      }
+      loginForm.addEventListener('submit',async function(event){
+        event.preventDefault();
+        var button=document.getElementById('loginButton');
+        loginMessage.textContent='';
+        button.disabled=true;
+        try{
+          var result=await request('login',{
+            method:'POST',
+            body:JSON.stringify({
+              username:document.getElementById('username').value,
+              password:document.getElementById('password').value
+            })
+          });
+          if(!result.response.ok){
+            loginMessage.textContent=result.data.error||'Connexion refusée.';
+            return;
+          }
+          document.getElementById('password').value='';
+          await loadStats();
+        }catch(error){
+          loginMessage.textContent='Impossible de joindre le serveur. Vérifie ta connexion et réessaie.';
+        }finally{
+          button.disabled=false;
+        }
+      });
+      document.getElementById('logoutButton').addEventListener('click',async function(){
+        dashboardMessage.textContent='';
+        try{
+          var result=await request('logout',{method:'POST',body:'{}'});
+          if(!result.response.ok) throw new Error(result.data.error||'Échec de déconnexion');
+          dashboard.hidden=true;
+          loginForm.hidden=false;
+          document.getElementById('username').value='';
+          document.getElementById('password').value='';
+        }catch(error){
+          dashboardMessage.textContent='La déconnexion a échoué. Ferme cette page puis réessaie.';
+        }
+      });
+      loadStats();
+    })();
+  </script>
+</body>
+</html>
